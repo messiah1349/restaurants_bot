@@ -1,6 +1,6 @@
 import sqlite3
 from dataclasses import dataclass
-from typing import List
+from typing import List, Any
 
 BD_NAME = 'sqlite_python.db'
 
@@ -16,7 +16,7 @@ def _generate_user_insert_query(telegram_id: str, user_name: str):
 @dataclass
 class Response:
     status: int
-    answer: str
+    answer: Any
 
 
 class BackEnd:
@@ -57,6 +57,16 @@ class BackEnd:
         else:
             return False
 
+    def _check_user_by_id(self, user_id):
+        check_user_qu = f"""
+                select * from user
+                where telegram_id = {user_id}
+                """
+
+        check_users_result = self._read_sql(check_user_qu)
+
+        return check_users_result
+
     def add_user(self, telegram_id: str, user_name: str) -> Response:
 
         if self._check_user_exist(telegram_id, user_name):
@@ -71,35 +81,76 @@ class BackEnd:
     def get_users_list(self):
         users = self._get_users()
         user_names = [x[1] for x in users]
-        return user_names
+        response = Response(1, user_names)
+        return response
 
     def change_user_name(self, user_id, new_user_name):
 
-        qu = f"""
-            update user 
-            set name = '{new_user_name}'
-            where telegram_id = {user_id}
-        """
+        check_users_result = self._check_user_by_id(user_id)
 
-        self._execute_query(qu)
+        if len(check_users_result) == 0:
+            return Response(-1, 'there is no this user')
+
+        elif len(check_users_result) > 1:
+            return Response(-1, 'there is more than 1 such user')
+
+        else:
+
+            qu = f"""
+                update user 
+                set name = '{new_user_name}'
+                where telegram_id = {user_id}
+            """
+            self._execute_query(qu)
+            return Response(1, 'name was changed')
 
     def remove_user(self, user_id):
 
-        qu = f"""
-            delete from user 
-            where telegram_id = {user_id}
-        """
+        check_users_result = self._check_user_by_id(user_id)
 
-        self._execute_query(qu)
+        if len(check_users_result) == 0:
+            return Response(-1, 'there is no this user')
+
+        elif len(check_users_result) > 1:
+            return Response(-1, 'there is more than 1 such user')
+
+        else:
+            qu = f"""
+                delete from user 
+                where telegram_id = {user_id}
+            """
+            self._execute_query(qu)
+            return Response(1, 'user was deleted')
 
 
 if __name__ == '__main__':
     backend = BackEnd(BD_NAME)
-    resp = backend.add_user(1488, 'putin')
-
+    # backend._check_user_by_id('aasd')
+    print('add kac')
+    resp = backend.add_user(1489, 'kac')
     print(resp)
-    backend.remove_user(1488)
-    users = backend._get_users()
-    print(users)
+
+    user_list = backend.get_users_list()
+    print(user_list)
+
+    print('wrong rename')
+    resp = backend.change_user_name(1485, 'varlamov')
+    print(resp)
+    user_list = backend.get_users_list()
+    print(user_list)
+
+    print('true rename')
+    resp = backend.change_user_name(1489, 'varlamov')
+    user_list = backend.get_users_list()
+    print(user_list)
+
+    print('wrong remove')
+    resp = backend.remove_user(1500)
+    print(resp)
+
+    print('true remove')
+    resp = backend.remove_user(1489)
+    print(resp)
+
     user_list = backend.get_users_list()
     print(user_list)
