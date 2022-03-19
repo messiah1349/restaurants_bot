@@ -68,10 +68,38 @@ class BackEnd:
 
         return response
 
+    def get_users_list(self):
+        users = self._get_users()
+        user_names = [x[1] for x in users]
+        return user_names
+
+    def change_user_name(self, user_id, new_user_name):
+
+        qu = f"""
+            update user 
+            set name = '{new_user_name}'
+            where telegram_id = {user_id}
+        """
+
+        self._execute_query(qu)
+
+    def remove_user(self, user_id):
+
+        qu = f"""
+            delete from user 
+            where telegram_id = {user_id}
+        """
+
+        self._execute_query(qu)
+
 
 if __name__ == '__main__':
     backend = BackEnd(BD_NAME)
-    resp = backend.add_user(123, 'volodya')
+    resp = backend.add_user(1488, 'putin')
+
     print(resp)
+    backend.remove_user(1488)
     users = backend._get_users()
     print(users)
+    user_list = backend.get_users_list()
+    print(user_list)
