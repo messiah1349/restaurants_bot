@@ -1,4 +1,4 @@
 create table user (
-telegram_id text not null
+telegram_id int not null
 ,name text not null
 );

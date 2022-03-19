@@ -71,7 +71,7 @@ class BackEnd:
 
 if __name__ == '__main__':
     backend = BackEnd(BD_NAME)
-    resp = backend.add_user('zelenskiy_id', 'volodya')
+    resp = backend.add_user(123, 'volodya')
     print(resp)
     users = backend._get_users()
     print(users)
