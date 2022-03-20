@@ -1,6 +1,7 @@
 import sqlite3
 from dataclasses import dataclass
 from typing import List, Any, Dict
+import subprocess
 import time
 
 import utils as ut
@@ -98,11 +99,18 @@ class BackEnd:
         return data
 
     def _generate_column_names(self, table_name: str) -> List:
-        query = _generate_column_list_query(table_name)
-        query_resp = self._read_sql(query)
-        columns = [row[0] for row in query_resp]
 
-        return columns
+        query = f"pragma table_info({table_name})"
+        column_data = self._read_sql(query)
+        column_data = sorted(column_data, key=lambda x: x[0])
+
+        return [x[1] for x in column_data]
+
+        # query = _generate_column_list_query(table_name)
+        # query_resp = self._read_sql(query)
+        # columns = [row[0] for row in query_resp]
+        #
+        # return columns
 
     def _get_table(self, table_name, clause) -> List:
         if clause:
