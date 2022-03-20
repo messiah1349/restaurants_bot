@@ -49,19 +49,6 @@ def _generate_payment_insert_query():
 
     return query
 
-def _generate_column_list_query(table_name):
-    query = f"""
-        SELECT
-          p.name AS col_name
-        FROM sqlite_master m
-        LEFT OUTER JOIN pragma_table_info((m.name)) p
-          ON m.name <> p.name
-        WHERE m.type = 'table'
-            and m.name = '{table_name}'
-        ORDER BY p.cid
-    """
-
-    return query
 
 @dataclass
 class Response:
@@ -106,12 +93,6 @@ class BackEnd:
 
         return [x[1] for x in column_data]
 
-        # query = _generate_column_list_query(table_name)
-        # query_resp = self._read_sql(query)
-        # columns = [row[0] for row in query_resp]
-        #
-        # return columns
-
     def _get_table(self, table_name, clause) -> List:
         if clause:
             query = f"select * from {table_name} {clause}"
@@ -121,7 +102,7 @@ class BackEnd:
         return table
 
     def _check_user_exist(self, telegram_id: str, user_name: str) -> bool:
-        users = self._get_users()
+        users = self._get_table('user', None)
         if telegram_id in [x[0] for x in users] or user_name in [x[1] for x in users]:
             return True
         else:
@@ -141,10 +122,10 @@ class BackEnd:
         check_result = self._check_entity_by_id(entity, id_num, id_column)
 
         if len(check_result) == 0:
-            return Response(-1, f'there is no {entity} {user_id}')
+            return Response(-1, f'there is no {entity} {id_num}')
 
         elif len(check_result) > 1:
-            return Response(-1, f'there is more than 1 {entity} {user_id}')
+            return Response(-1, f'there is more than 1 {entity} {id_num}')
 
         else:
             return None

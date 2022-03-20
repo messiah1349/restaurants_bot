@@ -70,7 +70,7 @@ if __name__ == '__main__':
     # add_payment_test(backend)
     #
     # print(backend.get_payment_list())
-    resp = backend.get_payment_list()
-    print(resp)
+    test_add_and_rename_user(backend)
+
 
 
