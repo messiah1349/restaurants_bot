@@ -1,31 +1,14 @@
 import sqlite3
 from dataclasses import dataclass
-from typing import List, Any, Dict
-import subprocess
+from typing import List, Any, Dict, Tuple
 import time
 
 import utils as ut
 
 BD_NAME = 'sqlite_python.db'
 PAYMENT_TYPES = ('restaurant', 'other')
-
-
-def _generate_user_insert_query(telegram_id: str, user_name: str):
-    query = f"""
-        insert into user
-        (telegram_id, name) values ('{telegram_id}', '{user_name}')
-    """
-    return query
-
-
-def _generate_payment_shares_insert_query(payment_id: int, user_id: int, payment_share: float):
-    query = f"""
-        insert into payment_shares
-        (payment_id, user_id, payment_share) values
-        ({payment_id}, {user_id}, {payment_share})
-    """
-
-    return query
+SQL_QUERY_PATH = 'sql_queries/'
+CALC_OWE_QUERY = 'calc_owe.sql'
 
 
 def _calc_times(time_str:str):
@@ -38,17 +21,16 @@ def _calc_times(time_str:str):
 
     return time_unix, time_str
 
-def _generate_payment_insert_query():
-    query = """
-    insert into payment
-    (payment_id, total_sum, payer, creator_id, datetime_unix, datetime_str, payment_type, restaurant_id,
-     is_resolve, comment)
+
+def _generate_table_insert_query(table_name: str, columns: List):
+    query = f"""
+    insert into {table_name}
+    ({", ".join(columns)})
     values
-    (?,?,?,?,?,?,?,?,?,?);
+    ({','.join(['?' for _ in range(len(columns))])});
     """
 
     return query
-
 
 @dataclass
 class Response:
@@ -114,7 +96,6 @@ class BackEnd:
                 select * from {entity}
                 where {id_column} = {id_num}
         """
-
         query_answer = self._read_sql(query)
         return query_answer
 
@@ -138,7 +119,6 @@ class BackEnd:
             new_id = 1
         else:
             new_id = max_id + 1
-
         return new_id
 
     def add_user(self, telegram_id: str, user_name: str) -> Response:
@@ -146,11 +126,10 @@ class BackEnd:
         if self._check_user_exist(telegram_id, user_name):
             return Response(-1, 'user has already existed')
 
-        query = _generate_user_insert_query(telegram_id, user_name)
-        self._execute_query(query)
-        response = Response(1, 'user_added')
+        inserted_values = (telegram_id, user_name)
+        self._insert_into_table('user', inserted_values)
 
-        return response
+        return Response(1, 'user_added')
 
     def _get_table_info(self, table_name, clause=None):
         data = self._get_table(table_name, clause)
@@ -159,22 +138,26 @@ class BackEnd:
         response = Response(1, table_info)
         return response
 
-    def get_users_list(self):
+    def _insert_into_table(self, table_name: str, inserted_values: Tuple) -> None:
+        columns = self._generate_column_names(table_name)
+        query = _generate_table_insert_query(table_name, columns)
+        self._execute_query(query, inserted_values)
+
+    def get_users_list(self) -> Response:
         return self._get_table_info('user')
 
-    def get_payment_list(self):
+    def get_payment_list(self) -> Response:
         return self._get_table_info('payment')
 
-    def get_unresolved_payment_list(self):
+    def get_unresolved_payment_list(self) -> Response:
         return self._get_table_info('payment', 'where is_resolve = 0')
 
-    def change_user_name(self, user_id, new_user_name):
+    def change_user_name(self, user_id, new_user_name) -> Response:
 
         user_not_uniqueness = self._check_answer_not_uniqueness('user', user_id, 'telegram_id')
         if user_not_uniqueness: return user_not_uniqueness
 
         else:
-
             qu = f"""
                 update user 
                 set name = '{new_user_name}'
@@ -183,12 +166,10 @@ class BackEnd:
             self._execute_query(qu)
             return Response(1, 'name was changed')
 
-    def remove_user(self, user_id):
+    def remove_user(self, user_id) -> Response:
 
         user_not_uniqueness = self._check_answer_not_uniqueness('user', user_id, 'telegram_id')
-        if user_not_uniqueness:
-            return user_not_uniqueness
-
+        if user_not_uniqueness: return user_not_uniqueness
         else:
             qu = f"""
                 delete from user 
@@ -199,9 +180,8 @@ class BackEnd:
 
     def _insert_shares(self, payment_id: int, shares: Dict) -> None:
         for user in shares:
-            insert_params = (payment_id, user, shares[user])
-            qu = _generate_payment_shares_insert_query(*insert_params)
-            self._execute_query(qu)
+            inserted_values = (payment_id, user, shares[user])
+            self._insert_into_table('payment_shares', inserted_values)
 
     def add_payment(self
                     ,total:float
@@ -213,7 +193,7 @@ class BackEnd:
                     ,is_resolved=False
                     ,restaurant_id:int=None
                     ,comment:str=""
-                    ):
+                    ) -> Response:
 
         # check_payer in bd
         user_not_uniqueness = self._check_answer_not_uniqueness('user', payer, 'telegram_id')
@@ -231,21 +211,18 @@ class BackEnd:
         # check restaurant in bd to be done
 
         payment_id = self._generate_payment_id()
-
         datetime_unix, datetime_str = _calc_times(payment_datetime)
-
-        insert_params = (payment_id, total, payer, creator_id, datetime_unix, datetime_str, payment_type,
+        inserted_values = (payment_id, total, payer, creator_id, datetime_unix, datetime_str, payment_type,
                          restaurant_id, int(is_resolved),comment)
 
-        insert_query = _generate_payment_insert_query()
-        self._execute_query(insert_query, insert_params)
+        self._insert_into_table('payment', inserted_values)
 
         #insert payment shares to table
         self._insert_shares(payment_id, shares)
 
         return Response(1, 'Payment was added')
 
-    def delete_payment(self, payment_id):
+    def delete_payment(self, payment_id) -> Response:
 
         payment_not_uniqueness = self._check_answer_not_uniqueness('payment', payment_id, 'payment_id')
         if payment_not_uniqueness: return payment_not_uniqueness
@@ -254,6 +231,48 @@ class BackEnd:
         self._execute_query(delete_query)
 
         return Response(1, 'payment was deleted')
+
+    def resolve(self, creator_id: int) -> Response:
+
+        user_not_uniqueness = self._check_answer_not_uniqueness('user', creator_id, 'telegram_id')
+        if user_not_uniqueness: return user_not_uniqueness
+
+        query = """
+            update payment
+            set is_resolve = 1
+            where is_resolve = 0 
+        """
+        self._execute_query(query)
+        inserted_params = (creator_id, time.time())
+        self._insert_into_table('resolve_history', inserted_params)
+
+        return Response(1, 'all payments was resolved')
+
+    def get_owes(self):
+        query = ut.read_file(SQL_QUERY_PATH + CALC_OWE_QUERY)
+        query_answer = self._read_sql(query)
+
+        owes = []
+
+        for row in query_answer:
+            user1_id, user2_id, user1_name, user2_name, owe = row
+            if owe > 0:
+                curr_resp = {
+                    'id_from': user1_id,
+                    'id_to': user2_id,
+                    'user_from': user1_name,
+                    'user_to': user2_name,
+                    'owe': owe}
+            else:
+                curr_resp = {
+                    'id_from': user2_id,
+                    'id_to': user1_id,
+                    'user_from': user2_name,
+                    'user_to': user1_name,
+                    'owe': -owe}
+            owes.append(curr_resp)
+
+        return Response(1, owes)
 
 
     def _test(self):

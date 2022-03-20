@@ -49,7 +49,20 @@ def add_payment_test(backend):
         , comment="ya malenkaya popka with shares"
 
     )
+    print(resp)
 
+    resp = backend.add_payment(
+        total=30000
+        , payer=1451
+        , creator_id=1451
+        , shares={1450: 18000, 1451: 12000}
+        , payment_type='other'
+        , payment_datetime=None
+        , is_resolved=False
+        , restaurant_id=None
+        , comment="ya malenkaya popka with shares"
+
+    )
     print(resp)
 
 
@@ -57,12 +70,17 @@ def delete_payment_test(backend):
 
     print(backend.get_payment_list())
 
-    print(backend.delete_payment(1))
+    print(backend.delete_payment(2))
     print(backend.get_payment_list())
 
 
 if __name__ == '__main__':
     backend = BackEnd(BD_NAME)
+
+    # backend.resolve(1450)
+    # print(backend.get_owes())
+
+    # test_add_and_rename_user(backend)
 
     # _ = backend.add_user(1450, 'zhora')
     # _ = backend.add_user(1451, 'stepa')
@@ -70,7 +88,7 @@ if __name__ == '__main__':
     # add_payment_test(backend)
     #
     # print(backend.get_payment_list())
-    test_add_and_rename_user(backend)
-
+    # delete_payment_test(backend)
+    # add_payment_test(backend)
 
 

@@ -7,6 +7,7 @@ SQL_QUERY_PATH = 'sql_queries/'
 USER_CREATE_QUERY = 'create_user_table.sql'
 PAYMENT_CREATE_QUERY = 'create_payment_table.sql'
 PAYMENT_SHARES_CREATE_QUERY = 'create_payment_shares_table.sql'
+RESOLVE_HISTORY_CREATE_QUERY = 'create_resolve_history.sql'
 
 
 def create_bd():
@@ -58,11 +59,16 @@ def create_payment_share_table():
     create_table_from_script(path)
     print("payment_shares table created")
 
+def crete_resolve_history_table():
+    path = SQL_QUERY_PATH + RESOLVE_HISTORY_CREATE_QUERY
+    create_table_from_script(path)
+    print("resolve_history table created")
 
 if __name__ == '__main__':
     # create_bd()
     # create_user_table()
-    create_payment_table()
+    # create_payment_table()
     # create_payment_share_table()
+    crete_resolve_history_table()
 
 
