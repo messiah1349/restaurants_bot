@@ -5,6 +5,8 @@ import utils as ut
 BD_NAME = 'sqlite_python.db'
 SQL_QUERY_PATH = 'sql_queries/'
 USER_CREATE_QUERY = 'create_user_table.sql'
+PAYMENT_CREATE_QUERY = 'create_payment_table.sql'
+PAYMENT_SHARES_CREATE_QUERY = 'create_payment_shares_table.sql'
 
 
 def create_bd():
@@ -26,19 +28,41 @@ def create_bd():
             print("connection closed")
 
 
-def create_user_table():
-    query = ut.read_file(SQL_QUERY_PATH + USER_CREATE_QUERY)
+def create_table_from_script(script_path:str) -> None:
+    query = ut.read_file(script_path)
 
     sqlite_connection = sqlite3.connect(BD_NAME)
-
     cursor = sqlite_connection.cursor()
     cursor.executescript(query)
     sqlite_connection.commit()
-    print("user table created")
     cursor.close()
 
 
+def create_user_table():
+
+    path = SQL_QUERY_PATH + USER_CREATE_QUERY
+    create_table_from_script(path)
+    print("user table created")
+
+
+def create_payment_table():
+
+    path = SQL_QUERY_PATH + PAYMENT_CREATE_QUERY
+    create_table_from_script(path)
+    print("payment table created")
+
+
+def create_payment_share_table():
+
+    path = SQL_QUERY_PATH + PAYMENT_SHARES_CREATE_QUERY
+    create_table_from_script(path)
+    print("payment_shares table created")
+
+
 if __name__ == '__main__':
-    create_bd()
-    create_user_table()
+    # create_bd()
+    # create_user_table()
+    create_payment_table()
+    # create_payment_share_table()
+
 
