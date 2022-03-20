@@ -46,17 +46,30 @@ def add_payment_test(backend):
         , payment_datetime=None
         , is_resolved=False
         , restaurant_id=None
-        , comment="ya malenkaya popka"
+        , comment="ya malenkaya popka with shares"
 
     )
 
     print(resp)
 
 
+def delete_payment_test(backend):
+
+    print(backend.get_payment_list())
+
+    print(backend.delete_payment(1))
+    print(backend.get_payment_list())
+
+
 if __name__ == '__main__':
     backend = BackEnd(BD_NAME)
 
-    _ = backend.add_user(1450, 'zhora')
-    _ = backend.add_user(1451, 'stepa')
+    # _ = backend.add_user(1450, 'zhora')
+    # _ = backend.add_user(1451, 'stepa')
+    #
+    # add_payment_test(backend)
+    #
+    # print(backend.get_payment_list())
+    delete_payment_test(backend)
 
-    add_payment_test(backend)
+

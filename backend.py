@@ -16,6 +16,17 @@ def _generate_user_insert_query(telegram_id: str, user_name: str):
     """
     return query
 
+
+def _generate_payment_shares_insert_query(payment_id: int, user_id: int, payment_share: float):
+    query = f"""
+        insert into payment_shares
+        (payment_id, user_id, payment_share) values
+        ({payment_id}, {user_id}, {payment_share})
+    """
+
+    return query
+
+
 def _calc_times(time_str:str):
 
     if not time_str:
@@ -33,6 +44,20 @@ def _generate_payment_insert_query():
      is_resolve, comment)
     values
     (?,?,?,?,?,?,?,?,?,?);
+    """
+
+    return query
+
+def _generate_column_list_query(table_name):
+    query = f"""
+        SELECT
+          p.name AS col_name
+        FROM sqlite_master m
+        LEFT OUTER JOIN pragma_table_info((m.name)) p
+          ON m.name <> p.name
+        WHERE m.type = 'table'
+            and m.name = '{table_name}'
+        ORDER BY p.cid
     """
 
     return query
@@ -72,10 +97,20 @@ class BackEnd:
 
         return data
 
-    def _get_users(self) -> List:
-        query = "select * from user"
-        user_table = self._read_sql(query)
-        return user_table
+    def _generate_column_names(self, table_name: str) -> List:
+        query = _generate_column_list_query(table_name)
+        query_resp = self._read_sql(query)
+        columns = [row[0] for row in query_resp]
+
+        return columns
+
+    def _get_table(self, table_name, clause) -> List:
+        if clause:
+            query = f"select * from {table_name} {clause}"
+        else:
+            query = f"select * from {table_name}"
+        table = self._read_sql(query)
+        return table
 
     def _check_user_exist(self, telegram_id: str, user_name: str) -> bool:
         users = self._get_users()
@@ -84,24 +119,24 @@ class BackEnd:
         else:
             return False
 
-    def _check_user_by_id(self, user_id):
-        check_user_qu = f"""
-                select * from user
-                where telegram_id = {user_id}
-                """
+    def _check_entity_by_id(self, entity, id_num, id_column):
 
-        check_users_result = self._read_sql(check_user_qu)
+        query = f"""
+                select * from {entity}
+                where {id_column} = {id_num}
+        """
 
-        return check_users_result
+        query_answer = self._read_sql(query)
+        return query_answer
 
-    def _check_answer_not_uniqueness(self, user_id):
-        check_users_result = self._check_user_by_id(user_id)
+    def _check_answer_not_uniqueness(self, entity, id_num, id_column):
+        check_result = self._check_entity_by_id(entity, id_num, id_column)
 
-        if len(check_users_result) == 0:
-            return Response(-1, f'there is no user {user_id}')
+        if len(check_result) == 0:
+            return Response(-1, f'there is no {entity} {user_id}')
 
-        elif len(check_users_result) > 1:
-            return Response(-1, f'there is more than 1 user {user_id}')
+        elif len(check_result) > 1:
+            return Response(-1, f'there is more than 1 {entity} {user_id}')
 
         else:
             return None
@@ -128,15 +163,25 @@ class BackEnd:
 
         return response
 
-    def get_users_list(self):
-        users = self._get_users()
-        user_names = [x[1] for x in users]
-        response = Response(1, user_names)
+    def _get_table_info(self, table_name, clause=None):
+        data = self._get_table(table_name, clause)
+        columns = self._generate_column_names(table_name)
+        table_info = [{column: value for column, value in zip(columns, row)} for row in data ]
+        response = Response(1, table_info)
         return response
+
+    def get_users_list(self):
+        return self._get_table_info('user')
+
+    def get_payment_list(self):
+        return self._get_table_info('payment')
+
+    def get_unresolved_payment_list(self):
+        return self._get_table_info('payment', 'where is_resolve = 0')
 
     def change_user_name(self, user_id, new_user_name):
 
-        user_not_uniqueness = self._check_answer_not_uniqueness(user_id)
+        user_not_uniqueness = self._check_answer_not_uniqueness('user', user_id, 'telegram_id')
         if user_not_uniqueness: return user_not_uniqueness
 
         else:
@@ -151,7 +196,7 @@ class BackEnd:
 
     def remove_user(self, user_id):
 
-        user_not_uniqueness = self._check_answer_not_uniqueness(user_id)
+        user_not_uniqueness = self._check_answer_not_uniqueness('user', user_id, 'telegram_id')
         if user_not_uniqueness:
             return user_not_uniqueness
 
@@ -162,6 +207,12 @@ class BackEnd:
             """
             self._execute_query(qu)
             return Response(1, 'user was deleted')
+
+    def _insert_shares(self, payment_id: int, shares: Dict) -> None:
+        for user in shares:
+            insert_params = (payment_id, user, shares[user])
+            qu = _generate_payment_shares_insert_query(*insert_params)
+            self._execute_query(qu)
 
     def add_payment(self
                     ,total:float
@@ -176,12 +227,12 @@ class BackEnd:
                     ):
 
         # check_payer in bd
-        user_not_uniqueness = self._check_answer_not_uniqueness(payer)
+        user_not_uniqueness = self._check_answer_not_uniqueness('user', payer, 'telegram_id')
         if user_not_uniqueness: return user_not_uniqueness
 
         # check all shares in bd
         for user_id in shares:
-            user_not_uniqueness = self._check_answer_not_uniqueness(user_id)
+            user_not_uniqueness = self._check_answer_not_uniqueness('user', user_id, 'telegram_id')
             if user_not_uniqueness: return user_not_uniqueness
 
         # check payment type valid
@@ -198,15 +249,22 @@ class BackEnd:
                          restaurant_id, int(is_resolved),comment)
 
         insert_query = _generate_payment_insert_query()
-
         self._execute_query(insert_query, insert_params)
+
+        #insert payment shares to table
+        self._insert_shares(payment_id, shares)
 
         return Response(1, 'Payment was added')
 
-    def _get_unresolved_payment(self):
-        qu = "select * from payment where is_resolve = 0"
-        data = self._read_sql(qu)
-        return data
+    def delete_payment(self, payment_id):
+
+        payment_not_uniqueness = self._check_answer_not_uniqueness('payment', payment_id, 'payment_id')
+        if payment_not_uniqueness: return payment_not_uniqueness
+
+        delete_query = f"delete from payment where payment_id = {payment_id}"
+        self._execute_query(delete_query)
+
+        return Response(1, 'payment was deleted')
 
 
     def _test(self):
