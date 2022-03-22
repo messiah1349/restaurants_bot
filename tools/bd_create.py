@@ -1,6 +1,6 @@
 import sqlite3
 
-import utils as ut
+import lib.utils as ut
 
 BD_NAME = 'sqlite_python.db'
 SQL_QUERY_PATH = 'sql_queries/'
@@ -59,16 +59,16 @@ def create_payment_share_table():
     create_table_from_script(path)
     print("payment_shares table created")
 
-def crete_resolve_history_table():
+def create_resolve_history_table():
     path = SQL_QUERY_PATH + RESOLVE_HISTORY_CREATE_QUERY
     create_table_from_script(path)
     print("resolve_history table created")
 
 if __name__ == '__main__':
-    # create_bd()
-    # create_user_table()
-    # create_payment_table()
-    # create_payment_share_table()
-    crete_resolve_history_table()
+    create_bd()
+    create_user_table()
+    create_payment_table()
+    create_payment_share_table()
+    create_resolve_history_table()
 
 
