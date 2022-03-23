@@ -1,13 +1,12 @@
+import time
 import sqlite3
 from dataclasses import dataclass
-from typing import List, Any, Dict, Tuple
-import time
+from typing import List, Any, Dict, Tuple, Optional
 
-import utils as ut
+import lib.utils as ut
 
-BD_NAME = 'sqlite_python.db'
 PAYMENT_TYPES = ('restaurant', 'other')
-SQL_QUERY_PATH = 'sql_queries/'
+SQL_QUERY_PATH = 'tools/sql_queries/'
 CALC_OWE_QUERY = 'calc_owe.sql'
 
 
@@ -37,17 +36,21 @@ class Response:
     answer: Any
 
 
-class BackEnd:
+class Backend:
 
-    def __init__(self, bd_name: str):
-        self.bd_name = bd_name
+    def __init__(self, db_name: Optional[str] = None):
+        self.db_name = db_name
 
-    def _get_bd_connection(self):
-        sqlite_connection = sqlite3.connect(self.bd_name)
+    def set_db(self, db_name: str):
+        self.db_name = db_name
+
+    def _get_db_connection(self):
+        assert self.db_name is not None, "set db_name first"
+        sqlite_connection = sqlite3.connect(self.db_name)
         return sqlite_connection
 
     def _execute_query(self, query: str, params=None):
-        sqlite_connection = self._get_bd_connection()
+        sqlite_connection = self._get_db_connection()
         cursor = sqlite_connection.cursor()
         if params:
             cursor.execute(query, params)
@@ -57,7 +60,7 @@ class BackEnd:
         cursor.close()
 
     def _read_sql(self, query: str):
-        sqlite_connection = self._get_bd_connection()
+        sqlite_connection = self._get_db_connection()
         cursor = sqlite_connection.cursor()
         cursor.execute(query)
         data = cursor.fetchall()
