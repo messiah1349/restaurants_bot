@@ -11,7 +11,7 @@ SQL_QUERY_PATH = 'sql_queries/'
 CALC_OWE_QUERY = 'calc_owe.sql'
 
 
-def _calc_times(time_str:str):
+def _calc_times(time_str: str):
 
     if not time_str:
         time_unix = time.time()
@@ -29,7 +29,6 @@ def _generate_table_insert_query(table_name: str, columns: List):
     values
     ({','.join(['?' for _ in range(len(columns))])});
     """
-
     return query
 
 @dataclass
@@ -246,7 +245,7 @@ class BackEnd:
         inserted_params = (creator_id, time.time())
         self._insert_into_table('resolve_history', inserted_params)
 
-        return Response(1, 'all payments was resolved')
+        return Response(1, 'all payments were resolved')
 
     def get_owes(self):
         query = ut.read_file(SQL_QUERY_PATH + CALC_OWE_QUERY)
@@ -273,12 +272,6 @@ class BackEnd:
             owes.append(curr_resp)
 
         return Response(1, owes)
-
-
-    def _test(self):
-        qu = "select max(payment_id) from payment"
-        data = self._read_sql(qu)
-        print(data)
 
 
 if __name__ == '__main__':

@@ -9,7 +9,7 @@ def read_file(file_name):
 
     return query
 
-def string_to_unix(date_str: str) -> int:
+def string_to_unix(date_str: str) -> float:
      return time.mktime(datetime.datetime.strptime(date_str, STRFTIME).timetuple())
 
 def unix_to_string(date_unix:int) -> str:
