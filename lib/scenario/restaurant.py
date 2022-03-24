@@ -20,9 +20,12 @@ class RestaurantInviter(Scenario):
 
         for user in response.answer:
             if user["telegram_id"] == send_id:
-                your_name = user["name"]
+                user_name = user["name"]
+                user_id = user["telegram_id"]
             else:
                 users_to_invite.append(user["telegram_id"])
 
-        for other_id in other_ids:
-            self.bot.send_message(other_id, f"{your_name} предлагает вам сходить в ресторан")
+        for user_to_invite in users_to_invite: 
+            self.bot.send_message(user_to_invite, f"{user_name} предлагает вам сходить в ресторан")
+
+        self.bot.send_message(user_id, "Все пользователи были уведомлены!")

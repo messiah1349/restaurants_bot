@@ -224,10 +224,16 @@ class RemovePayment(Scenario):
             self.bot.send_message(send_id, "Что-то пошло не так, придется еще раз!!")
             return
 
+
         payments = response.answer
+
+        if not len(payments):
+            self.bot.send_message(send_id, "Нечего удалять!")
+            return
+
         response = self.backend.get_users_list()
 
-        if response.status != -1:
+        if response.status != 1:
             self.bot.send_message(send_id, "Что-то пошло не так, придется еще раз!!")
             return
 
