@@ -11,6 +11,7 @@ join
         p.payment_id = ps.payment_id
 where
     p.is_resolve = 0
+    and p.is_deleted = 0
     and user_id <> payer
 )
 select

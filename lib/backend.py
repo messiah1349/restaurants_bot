@@ -3,6 +3,8 @@ import sqlite3
 from dataclasses import dataclass
 from typing import List, Any, Dict, Tuple, Optional
 
+import sys
+sys.path.append('../')
 import lib.utils as ut
 
 PAYMENT_TYPES = ('restaurant', 'other')
@@ -10,7 +12,7 @@ SQL_QUERY_PATH = 'tools/sql_queries/'
 CALC_OWE_QUERY = 'calc_owe.sql'
 
 
-def _calc_times(time_str:str):
+def _calc_times(time_str: str):
 
     if not time_str:
         time_unix = time.time()
@@ -28,7 +30,6 @@ def _generate_table_insert_query(table_name: str, columns: List):
     values
     ({','.join(['?' for _ in range(len(columns))])});
     """
-
     return query
 
 @dataclass
@@ -93,19 +94,25 @@ class Backend:
         else:
             return False
 
-    def _check_entity_by_id(self, entity, id_num, id_column):
+    def _check_entity_by_id(self, entity, id_num, id_column, is_str):
 
-        query = f"""
-                select * from {entity}
-                where {id_column} = {id_num}
-        """
+        if is_str:
+            query = f"""
+                    select * from {entity}
+                    where {id_column} = '{id_num}'
+            """
+        else:
+            query = f"""
+                    select * from {entity}
+                    where {id_column} = {id_num}
+            """
         query_answer = self._read_sql(query)
         return query_answer
 
-    def _check_answer_not_uniqueness(self, entity, id_num, id_column):
-        check_result = self._check_entity_by_id(entity, id_num, id_column)
+    def _check_answer_not_uniqueness(self, entity, id_num, id_column, is_str=False):
+        check_result = self._check_entity_by_id(entity, id_num, id_column, is_str)
 
-        if len(check_result) == 0:
+        if not len(check_result):
             return Response(-1, f'there is no {entity} {id_num}')
 
         elif len(check_result) > 1:
@@ -113,6 +120,15 @@ class Backend:
 
         else:
             return None
+
+    def _generate_id(self, table_name, id_column):
+        query = f"select max({id_column}) from {table_name}"
+        max_id = self._read_sql(query)[0][0]
+        if not max_id:
+            new_id = 1
+        else:
+            new_id = max_id + 1
+        return new_id
 
     def _generate_payment_id(self):
 
@@ -150,10 +166,17 @@ class Backend:
         return self._get_table_info('user')
 
     def get_payment_list(self) -> Response:
-        return self._get_table_info('payment')
+        return self._get_table_info('payment', 'where is_deleted = 0')
 
     def get_unresolved_payment_list(self) -> Response:
-        return self._get_table_info('payment', 'where is_resolve = 0')
+        return self._get_table_info('payment', 'where is_resolve = 0 and is_deleted = 0')
+
+    def get_restaurant_list(self) -> Response:
+        return self._get_table_info('restaurant', 'where is_deleted = 0')
+
+    def get_restaurant_mark_list(self) -> Response:
+        return self._get_table_info('restaurant_mark', 'where is_actual = 1')
+
 
     def change_user_name(self, user_id, new_user_name) -> Response:
 
@@ -216,7 +239,7 @@ class Backend:
         payment_id = self._generate_payment_id()
         datetime_unix, datetime_str = _calc_times(payment_datetime)
         inserted_values = (payment_id, total, payer, creator_id, datetime_unix, datetime_str, payment_type,
-                         restaurant_id, int(is_resolved),comment)
+                         restaurant_id, int(is_resolved),comment, 0)
 
         self._insert_into_table('payment', inserted_values)
 
@@ -224,16 +247,6 @@ class Backend:
         self._insert_shares(payment_id, shares)
 
         return Response(1, 'Payment was added')
-
-    def delete_payment(self, payment_id) -> Response:
-
-        payment_not_uniqueness = self._check_answer_not_uniqueness('payment', payment_id, 'payment_id')
-        if payment_not_uniqueness: return payment_not_uniqueness
-
-        delete_query = f"delete from payment where payment_id = {payment_id}"
-        self._execute_query(delete_query)
-
-        return Response(1, 'payment was deleted')
 
     def resolve(self, creator_id: int) -> Response:
 
@@ -249,7 +262,7 @@ class Backend:
         inserted_params = (creator_id, time.time())
         self._insert_into_table('resolve_history', inserted_params)
 
-        return Response(1, 'all payments was resolved')
+        return Response(1, 'all payments were resolved')
 
     def get_owes(self):
         query = ut.read_file(SQL_QUERY_PATH + CALC_OWE_QUERY)
@@ -277,11 +290,65 @@ class Backend:
 
         return Response(1, owes)
 
+    def add_restaurant(self, restaurant_name: str, is_fast:int=0, is_near: int=0, is_new: int=1):
 
-    def _test(self):
-        qu = "select max(payment_id) from payment"
-        data = self._read_sql(qu)
-        print(data)
+        exist_check_result = self._check_entity_by_id('restaurant', restaurant_name, 'name', is_str=True)
+        if len(exist_check_result):
+            return Response(-1, f'restaurant {restaurant_name} is already existed')
+
+        restaurant_id = self._generate_id('restaurant', 'restaurant_id')
+
+        inserted_values = (restaurant_id, restaurant_name, is_fast, is_near, is_new, 0)
+        self._insert_into_table('restaurant', inserted_values)
+
+        return Response(1, 'restaurant was added')
+
+
+    def _remove_entity(self, table_name, entity, column_name, deleted_column = 'is_deleted', is_str=False) -> Response:
+
+        entity_not_uniqueness = self._check_answer_not_uniqueness(table_name, entity, column_name, is_str)
+        if entity_not_uniqueness: return entity_not_uniqueness
+
+        delete_query = f"update {table_name} set {deleted_column} = 1 where {column_name} = {entity}"
+        self._execute_query(delete_query)
+
+        return Response(1, f'{table_name} was deleted')
+
+
+    def remove_restaurant(self, restaurant_id: int) -> Response:
+        return self._remove_entity('restaurant', restaurant_id, 'restaurant_id')
+
+    def delete_payment(self, payment_id) -> Response:
+        return self._remove_entity('payment', payment_id, 'payment_id')
+
+    def _update_rest_mark_actuality(self, restaurant_id, user_id):
+
+        change_actual_query = f"""
+                    update restaurant_mark 
+                    set is_actual = 0
+                    where 1=1
+                        and is_actual = 1
+                        and restaurant_id = {restaurant_id}
+                        and user_id = {user_id}
+                """
+        self._execute_query(change_actual_query)
+
+    def add_restaurant_mark(self, restaurant_id, user_id, mark):
+
+        user_not_uniqueness = self._check_answer_not_uniqueness('user', user_id, 'telegram_id')
+        if user_not_uniqueness: return user_not_uniqueness
+
+        restaraunt_not_uniqueness = self._check_answer_not_uniqueness('restaurant', restaurant_id, 'restaurant_id')
+        if restaraunt_not_uniqueness: return restaraunt_not_uniqueness
+
+        self._update_rest_mark_actuality(restaurant_id, user_id)
+
+        current_time = time.time()
+
+        inserted_values = (restaurant_id, user_id, mark, current_time, 1)
+        self._insert_into_table('restaurant_mark', inserted_values)
+
+        return Response(1, 'mark was added')
 
 
 if __name__ == '__main__':
