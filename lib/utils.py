@@ -13,12 +13,12 @@ def read_file(file_name):
 
     return query
 
-<<<<<<< HEAD:utils.py
-def string_to_unix(date_str: str) -> float:
-=======
+
+# def string_to_unix(date_str: str) -> float:
+# =======
 
 def string_to_unix(date_str: str) -> int:
->>>>>>> 716a25c58d42509e74e741baf2efaab210f85fb2:lib/utils.py
+# >>>>>>> 716a25c58d42509e74e741baf2efaab210f85fb2:lib/utils.py
      return time.mktime(datetime.datetime.strptime(date_str, STRFTIME).timetuple())
 
 

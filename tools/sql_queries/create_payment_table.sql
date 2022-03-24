@@ -9,4 +9,5 @@ payment_id int not null
 ,restaurant_id int
 ,is_resolve int not null
 ,comment text
+,is_deleted int not null
 );
