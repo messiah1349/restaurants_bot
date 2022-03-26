@@ -292,7 +292,7 @@ class ListOwes(Scenario):
             "owe": "Сколько",
         }, axis=1, inplace=True)
 
-        img_name = f"tables/{send_id}_payments.png"
+        img_name = f"tables/{send_id}_owes.png"
         save_table_as_image(owes, plot_index=False, output_file=img_name)
 
         with open(img_name, "rb") as ifile:
