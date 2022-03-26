@@ -1,21 +1,25 @@
+import os
 import time
 import sqlite3
 from dataclasses import dataclass
 from typing import List, Any, Dict, Tuple, Optional
 import numpy as np
 
+ROOT_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))
+
 import sys
-sys.path.append('../')
+sys.path.append(ROOT_DIR)
 import lib.utils as ut
 
-BD_NAME = '../data/prod.db'
 
-CONFIG_PATH = '../tools/config.yaml'
+BD_NAME = f'{ROOT_DIR}/data/prod.db'
+
+CONFIG_PATH = f'{ROOT_DIR}/tools/config.yaml'
 config = ut.read_config(CONFIG_PATH)
 
 PAYMENT_TYPES = config['payments_types']
 RESTAURANT_MARK_DICT = config['restautant_mark']
-SQL_QUERY_PATH = '../tools/sql_queries/'
+SQL_QUERY_PATH = f'{ROOT_DIR}/tools/sql_queries/'
 CALC_OWE_QUERY = 'calc_owe.sql'
 GET_RESTAURANT_QUERY = 'get_restaurant.sql'
 

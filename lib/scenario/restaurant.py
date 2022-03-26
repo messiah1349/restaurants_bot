@@ -312,7 +312,7 @@ class SelectRandomRestaurant(Scenario):
             send_id = message.from_user.id
             print(self.state["filters"])
 
-            self.backend.get_random_restaurant(**self.state["filters"])
+            response = self.backend.get_random_restaurant(**self.state["filters"])
 
             if response.status != 1:
                 msg = f"Произошла хуйня следующего содержания:\n{response.answer}"

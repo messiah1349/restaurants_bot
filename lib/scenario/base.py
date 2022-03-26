@@ -22,6 +22,7 @@ class Scenario:
             parent.children.append(self)
 
         self.state = {}
+        self.accept_callback = False
 
 
 class ScenarioList(Scenario):
