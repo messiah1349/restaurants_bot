@@ -1,5 +1,6 @@
 import datetime
 import time
+import yaml
 
 import numpy as np
 import pandas as pd
@@ -12,6 +13,13 @@ def read_file(file_name):
         query = file.read()
 
     return query
+
+
+def read_config(config_path):
+    with open(config_path, 'r') as file:
+        prime_service = yaml.safe_load(file)
+
+    return prime_service
 
 
 def string_to_unix(date_str: str) -> int:

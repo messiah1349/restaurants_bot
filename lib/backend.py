@@ -2,14 +2,22 @@ import time
 import sqlite3
 from dataclasses import dataclass
 from typing import List, Any, Dict, Tuple, Optional
+import numpy as np
 
 import sys
 sys.path.append('../')
 import lib.utils as ut
 
-PAYMENT_TYPES = ('restaurant', 'other')
-SQL_QUERY_PATH = 'tools/sql_queries/'
+BD_NAME = '../data/prod.db'
+
+CONFIG_PATH = '../tools/config.yaml'
+config = ut.read_config(CONFIG_PATH)
+
+PAYMENT_TYPES = config['payments_types']
+RESTAURANT_MARK_DICT = config['restautant_mark']
+SQL_QUERY_PATH = '../tools/sql_queries/'
 CALC_OWE_QUERY = 'calc_owe.sql'
+GET_RESTAURANT_QUERY = 'get_restaurant.sql'
 
 
 def _calc_times(time_str: str):
@@ -290,7 +298,8 @@ class Backend:
 
         return Response(1, owes)
 
-    def add_restaurant(self, restaurant_name: str, is_fast:int=0, is_near: int=0, is_new: int=1):
+    def add_restaurant(self, \
+            restaurant_name: str, is_fast: bool=False, is_near: bool=False, is_new: bool=True):
 
         exist_check_result = self._check_entity_by_id('restaurant', restaurant_name, 'name', is_str=True)
         if len(exist_check_result):
@@ -298,7 +307,7 @@ class Backend:
 
         restaurant_id = self._generate_id('restaurant', 'restaurant_id')
 
-        inserted_values = (restaurant_id, restaurant_name, is_fast, is_near, is_new, 0)
+        inserted_values = (restaurant_id, restaurant_name, int(is_fast), int(is_near), int(is_new), 0)
         self._insert_into_table('restaurant', inserted_values)
 
         return Response(1, 'restaurant was added')
@@ -341,14 +350,51 @@ class Backend:
         restaraunt_not_uniqueness = self._check_answer_not_uniqueness('restaurant', restaurant_id, 'restaurant_id')
         if restaraunt_not_uniqueness: return restaraunt_not_uniqueness
 
+        # check mark value
+        if mark not in RESTAURANT_MARK_DICT:
+            return Response(-1, 'mark is not from mark allowed list')
+
         self._update_rest_mark_actuality(restaurant_id, user_id)
 
         current_time = time.time()
 
-        inserted_values = (restaurant_id, user_id, mark, current_time, 1)
+        value_mark = RESTAURANT_MARK_DICT[mark]
+
+        inserted_values = (restaurant_id, user_id, value_mark, current_time, 1)
         self._insert_into_table('restaurant_mark', inserted_values)
 
         return Response(1, 'mark was added')
+
+    def get_random_restaurant(self, is_fast: bool = None, is_near: bool = None, is_new: bool = None):
+        query = ut.read_file(SQL_QUERY_PATH + GET_RESTAURANT_QUERY)
+
+        condition = ''
+
+        if is_fast is not None:
+            condition += f'and r.is_fast = {int(is_fast)}\n'
+
+        if is_near is not None:
+            condition += f'and r.is_near = {int(is_near)}\n'
+
+        if is_new is not None:
+            condition += f'and r.is_new = {int(is_new)}\n'
+
+        rest_data = self._read_sql(query.format(condition=condition))
+        rest_size = len(rest_data)
+
+        if not rest_size:
+            return Response(1, [])
+
+        preds = np.array([x[2] for x in rest_data])
+        preds_norm = preds / preds.sum()
+
+        choice = np.random.choice(range(rest_size), size=rest_size, replace=False, p=preds_norm)
+
+        rest_data_choiced = [rest_data[ix] for ix in choice]
+
+        ret = [{'restaurant_id': rest[0], 'restaurant_name': rest[1]} for rest in rest_data_choiced]
+
+        return Response(1, ret)
 
 
 if __name__ == '__main__':

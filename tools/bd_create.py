@@ -2,7 +2,7 @@ import sqlite3
 import sys
 sys.path.append('../lib/')
 
-import lib.utils as ut
+import utils as ut
 
 BD_NAME = '../data/prod.db'
 SQL_QUERY_PATH = 'sql_queries/'

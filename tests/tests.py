@@ -1,6 +1,7 @@
 import sys
 sys.path.append('../lib/')
 
+from collections import Counter
 from backend import *
 BD_NAME = '../data/prod.db'
 
@@ -79,28 +80,49 @@ def delete_payment_test(backend):
     print(backend.get_payment_list())
 
 
+def check_rest_get_probs(backend):
+    names = ['plennica', 'taverna2', 'beirut']
+    prs = [0.625, 1, 0.75]
+    print({name: pr / sum(prs) for name, pr in zip(names, prs)})
+
+    cnt = Counter()
+    n = 10000
+    for i in range(n):
+        ans = backend.get_random_restaurant().answer
+        top_ans = ans[0]['restaurant_name']
+        cnt.update([top_ans])
+
+    print({rest: float(val) / n for rest, val in cnt.items()})
+
 if __name__ == '__main__':
     backend = Backend(BD_NAME)
+    # backend._execute_query('drop table restaurant_mark')
 
-    print (backend.get_restaurant_mark_list())
-    print(backend.add_restaurant_mark(1, 46340594, 'zbs'))
-    print (backend.get_restaurant_mark_list())
-    print(backend.add_restaurant_mark(1, 114768813, 'zbs2'))
-    print (backend.get_restaurant_mark_list())
-    print(backend.add_restaurant_mark(1, 46340594, 'huynya'))
-    print (backend.get_restaurant_mark_list())
 
+
+    # print(backend.add_restaurant('beirut'))
+
+
+    print(backend.add_restaurant_mark(2, 46340594, 'Очень хочу'))
+    print(backend.add_restaurant_mark(2, 114768813, 'Не хотелось бы'))
+    print(backend.add_restaurant_mark(3, 46340594, 'Ужасно'))
+    print(backend.add_restaurant_mark(3, 46340594, 'Очень хочу'))
+    print(backend.add_restaurant_mark(3, 114768813, 'Очень хочу'))
+    print(backend.add_restaurant_mark(4, 46340594, 'Очень хочу'))
+    print(backend.add_restaurant_mark(4, 46340594, 'Хуй'))
+
+    check_rest_get_probs(backend)
 
 
     # print(backend.get_restaurant_list())
-    # print(backend.add_restaurant('taverna'))
+    # print(backend.add_restaurant('taverna2'))
     # print(backend.get_restaurant_list())
     # print(backend.remove_restaurant(1))
     # print(backend.get_restaurant_list())
     # delete_payment_test(backend)
     # add_payment_test(backend)
 
-
+    # backend.add_restaurant('plennica')
 
     # print(backend.get_payment_list())
 
