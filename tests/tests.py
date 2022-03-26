@@ -96,20 +96,20 @@ def check_rest_get_probs(backend):
 
 if __name__ == '__main__':
     backend = Backend(BD_NAME)
-    # backend._execute_query('drop table restaurant_mark')
+    backend._execute_query('drop table restaurant_mark')
 
 
 
     # print(backend.add_restaurant('beirut'))
 
 
-    print(backend.add_restaurant_mark(2, 46340594, 'Очень хочу'))
-    print(backend.add_restaurant_mark(2, 114768813, 'Не хотелось бы'))
-    print(backend.add_restaurant_mark(3, 46340594, 'Ужасно'))
-    print(backend.add_restaurant_mark(3, 46340594, 'Очень хочу'))
-    print(backend.add_restaurant_mark(3, 114768813, 'Очень хочу'))
-    print(backend.add_restaurant_mark(4, 46340594, 'Очень хочу'))
-    print(backend.add_restaurant_mark(4, 46340594, 'Хуй'))
+    # print(backend.add_restaurant_mark(2, 46340594, 'Очень хочу'))
+    # print(backend.add_restaurant_mark(2, 114768813, 'Не хотелось бы'))
+    # print(backend.add_restaurant_mark(3, 46340594, 'Ужасно'))
+    # print(backend.add_restaurant_mark(3, 46340594, 'Очень хочу'))
+    # print(backend.add_restaurant_mark(3, 114768813, 'Очень хочу'))
+    # print(backend.add_restaurant_mark(4, 46340594, 'Очень хочу'))
+    # print(backend.add_restaurant_mark(4, 46340594, 'Хуй'))
 
     check_rest_get_probs(backend)
 
