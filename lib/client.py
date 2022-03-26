@@ -21,11 +21,21 @@ class ScenarioProcessor:
             self.root_scenario[sid] = init_scenarios(self.bot, self.backend)
             self.next_step[sid] = self.root_scenario[sid].start
 
+        if isinstance(message, telebot.types.CallbackQuery):
+            if not self._check_method_accepts_callbacks(self.next_step[sid]):
+                self._send_callback_query_error(sid)
+                return
+
         self.next_step[sid] = self.next_step[sid](message)
 
         if self.next_step[sid] is None:
             self.next_step[sid] = self.root_scenario[sid].start(message)
 
+    def _check_method_accepts_callbacks(self, method):
+        return method.__self__.accept_callback
+
+    def _send_callback_query_error(self, sid):
+        self.bot.send_message(sid, "Перестань сюда нажимать, долбоеб")
 
 class Client:
     ROOT_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))

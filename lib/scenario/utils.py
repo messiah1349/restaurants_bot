@@ -5,6 +5,14 @@ from typing import Iterable
 
 from telebot import types
 
+def create_inline_keyboard(button_texts: Iterable[str], callback_values: Iterable[str]) -> types.InlineKeyboardMarkup:
+    assert len(button_texts) == len(callback_values)
+    keyboard = types.InlineKeyboardMarkup()
+    for button, callback in zip(button_texts, callback_values):
+        button = types.InlineKeyboardButton(text=button, callback_data=callback)
+        keyboard.add(button)
+    return keyboard
+
 
 def create_keyboard(texts: Iterable[str]) -> types.ReplyKeyboardMarkup:
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=False, one_time_keyboard=True)

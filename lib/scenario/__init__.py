@@ -18,7 +18,11 @@ from lib.scenario.user import (
 )
 
 from lib.scenario.restaurant import (
-    RestaurantInviter
+    RestaurantInviter,
+    CreateRestaurant,
+    ListRestaurants,
+    RemoveRestaurant,
+    SelectRandomRestaurant
 )
 
 
@@ -38,6 +42,10 @@ def init_scenarios(bot, backend):
     ChangeUserName(users, bot, backend)
 
     restaurants = ScenarioList(root, "Рестораны", bot, backend)
+    SelectRandomRestaurant(restaurants, bot, backend)
     RestaurantInviter(restaurants, bot, backend)
+    CreateRestaurant(restaurants, bot, backend)
+    ListRestaurants(restaurants, bot, backend)
+    RemoveRestaurant(restaurants, bot, backend)
 
     return root
