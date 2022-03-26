@@ -19,5 +19,5 @@ group by
     r.restaurant_id
     ,r.name
 having
-    min(mark) > 0
+    min(mark) > 0 or count(mark) = 0;
 ;
