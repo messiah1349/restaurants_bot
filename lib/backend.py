@@ -15,7 +15,7 @@ import lib.utils as ut
 
 BD_NAME = f'{ROOT_DIR}/data/prod.db'
 
-CONFIG_PATH = f'{ROOT_DIR}/tools/config.yaml'
+CONFIG_PATH = f'{ROOT_DIR}/configs/config.yaml'
 config = ut.read_config(CONFIG_PATH)
 
 PAYMENT_TYPES = config['payments_types']
