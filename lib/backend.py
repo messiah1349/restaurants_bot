@@ -23,6 +23,7 @@ RESTAURANT_MARK_DICT = config['restautant_mark']
 SQL_QUERY_PATH = f'{ROOT_DIR}/tools/sql_queries/'
 CALC_OWE_QUERY = 'calc_owe.sql'
 GET_RESTAURANT_QUERY = 'get_restaurant.sql'
+GET_RESTAURANT_MARK_QUERY = 'get_restaurant_mark.sql'
 
 
 def _calc_times(time_str: str):
@@ -210,8 +211,16 @@ class Backend:
         return self._get_table_info('restaurant', 'where is_deleted = 0')
 
     def get_restaurant_mark_list(self) -> Response:
-        return self._get_table_info('restaurant_mark', 'where is_actual = 1')
 
+        query = ut.read_file(SQL_QUERY_PATH + GET_RESTAURANT_MARK_QUERY)
+        data = self._read_sql(query)
+        mark_dict_rev = {value: key for key, value in RESTAURANT_MARK_DICT.items()}
+        data = [(val[0], val[1], mark_dict_rev[val[2]]) for val in data]
+        columns = ['user_name', 'restaurant_name', 'mark']
+
+        table_info = [{column: value for column, value in zip(columns, row)} for row in data]
+        response = Response(1, table_info)
+        return response
 
     def change_user_name(self, user_id, new_user_name) -> Response:
 
