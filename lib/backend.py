@@ -1,6 +1,7 @@
 import os
 import time
 import sqlite3
+import pandas as pd
 from dataclasses import dataclass
 from typing import List, Any, Dict, Tuple, Optional
 import numpy as np
@@ -91,13 +92,47 @@ class Backend:
 
         return [x[1] for x in column_data]
 
-    def _get_table(self, table_name, clause) -> List:
-        if clause:
-            query = f"select * from {table_name} {clause}"
+    def _get_table(self, table_name, condition) -> List:
+        if condition:
+            query = f"select * from {table_name} {condition}"
         else:
             query = f"select * from {table_name}"
         table = self._read_sql(query)
         return table
+
+    def _get_table_info(self, table_name, clause=None):
+        data = self._get_table(table_name, clause)
+        columns = self._generate_column_names(table_name)
+        table_info = [{column: value for column, value in zip(columns, row)} for row in data ]
+        response = Response(1, table_info)
+        return response
+
+    def _insert_into_table(self, table_name: str, inserted_values: Tuple) -> None:
+        columns = self._generate_column_names(table_name)
+        query = _generate_table_insert_query(table_name, columns)
+        self._execute_query(query, inserted_values)
+
+    def _get_table_as_dataframe(self, table_name: str, condition=None) -> pd.DataFrame:
+        data = self._get_table(table_name, condition)
+        columns = self._generate_column_names(table_name)
+
+        df = pd.DataFrame(data, columns=columns)
+        return df
+
+    def _insert_csv_to_table(self, table_name: str, path_to_file: str) -> None:
+        df = pd.read_csv(path_to_file)
+        inserted_values = df.apply(tuple, axis=1)
+        for inserted_value in inserted_values:
+            self._insert_into_table(table_name, inserted_value)
+
+    def save_table_to_csv(self, table_name:str,  path_to_file: str):
+        df = self._get_table_as_dataframe(table_name)
+        df.to_csv(path_to_file, index=False)
+
+    def replace_table_from_csv(self, table_name: str, path_to_file: str):
+        delete_query = f"delete from {table_name}"
+        self._execute_query(delete_query)
+        self._insert_csv_to_table(table_name, path_to_file)
 
     def _check_user_exist(self, telegram_id: str, user_name: str) -> bool:
         users = self._get_table('user', None)
@@ -162,18 +197,6 @@ class Backend:
 
         return Response(1, 'user_added')
 
-    def _get_table_info(self, table_name, clause=None):
-        data = self._get_table(table_name, clause)
-        columns = self._generate_column_names(table_name)
-        table_info = [{column: value for column, value in zip(columns, row)} for row in data ]
-        response = Response(1, table_info)
-        return response
-
-    def _insert_into_table(self, table_name: str, inserted_values: Tuple) -> None:
-        columns = self._generate_column_names(table_name)
-        query = _generate_table_insert_query(table_name, columns)
-        self._execute_query(query, inserted_values)
-
     def get_users_list(self) -> Response:
         return self._get_table_info('user')
 
@@ -192,8 +215,14 @@ class Backend:
 
     def change_user_name(self, user_id, new_user_name) -> Response:
 
-        user_not_uniqueness = self._check_answer_not_uniqueness('user', user_id, 'telegram_id')
-        if user_not_uniqueness: return user_not_uniqueness
+        user_id_not_uniqueness = self._check_answer_not_uniqueness('user', user_id, 'telegram_id')
+        if user_id_not_uniqueness:
+            return user_id_not_uniqueness
+
+        user_name_checking = \
+            self._check_entity_by_id('user', new_user_name, 'name', is_str=True)
+        if len(user_name_checking):
+            return Response(-1, f'user {new_user_name} have already existed')
 
         else:
             qu = f"""
@@ -221,6 +250,19 @@ class Backend:
             inserted_values = (payment_id, user, shares[user])
             self._insert_into_table('payment_shares', inserted_values)
 
+    def _change_restaurant_is_new_flg(self, restaurant_id):
+
+        query = f"""
+            update restaurant
+            set is_new = 0
+            where 
+                restaurant_id = {restaurant_id}
+                and is_deleted = 0
+                and is_new = 1
+        """
+        self._execute_query(query)
+
+
     def add_payment(self
                     ,total:float
                     ,payer:int
@@ -235,7 +277,8 @@ class Backend:
 
         # check_payer in bd
         user_not_uniqueness = self._check_answer_not_uniqueness('user', payer, 'telegram_id')
-        if user_not_uniqueness: return user_not_uniqueness
+        if user_not_uniqueness:
+            return user_not_uniqueness
 
         # check all shares in bd
         for user_id in shares:
@@ -246,8 +289,16 @@ class Backend:
         if payment_type not in PAYMENT_TYPES:
             return Response(-1, 'not valid payment_type')
 
-        # check restaurant in bd to be done
+        # check restaurant in db
+        if restaurant_id:
+            restaurant_not_uniqueness = \
+                self._check_answer_not_uniqueness('restaurant', restaurant_id, 'restaurant_id')
+            if restaurant_not_uniqueness:
+                return restaurant_not_uniqueness
 
+            self._change_restaurant_is_new_flg(restaurant_id)
+
+        # insert values to restaurant table
         payment_id = self._generate_payment_id()
         datetime_unix, datetime_str = _calc_times(payment_datetime)
         inserted_values = (payment_id, total, payer, creator_id, datetime_unix, datetime_str, payment_type,
