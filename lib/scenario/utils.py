@@ -1,14 +1,24 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from typing import Iterable
+from typing import Iterable, Optional
 
 from telebot import types
 
-def create_inline_keyboard(button_texts: Iterable[str], callback_values: Iterable[str]) -> types.InlineKeyboardMarkup:
+from lib.scenario.event import sign_callback
+
+
+def create_inline_keyboard(
+        button_texts: Iterable[str],
+        callback_values: Iterable[str],
+        event_type: Optional[str] = None
+) -> types.InlineKeyboardMarkup:
     assert len(button_texts) == len(callback_values)
     keyboard = types.InlineKeyboardMarkup()
     for button, callback in zip(button_texts, callback_values):
+        if event_type is not None:
+            callback = sign_callback(callback, event_type)
+
         button = types.InlineKeyboardButton(text=button, callback_data=callback)
         keyboard.add(button)
     return keyboard

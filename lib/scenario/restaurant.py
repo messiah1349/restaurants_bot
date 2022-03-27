@@ -119,7 +119,10 @@ class CreateRestaurant(Scenario):
         else:
             self.bot.send_message(send_id, "Опять ввел хуйню.")
 
-    def handle_attributes(self, message: Union["telebot.types.Message", "telebot.types.CallbackQuery"]) -> Optional[Callable]:
+    def handle_attributes(
+            self,
+            message: Union["telebot.types.Message", "telebot.types.CallbackQuery"]
+    ) -> Optional[Callable]:
         if isinstance(message, telebot.types.CallbackQuery):
             self._handle_callback(message)
             return self.handle_attributes
@@ -136,6 +139,7 @@ class CreateRestaurant(Scenario):
             msg.append(text_pair[text_index])
 
         return "\n".join(msg)
+
 
 class ListRestaurants(Scenario):
     def get_name(self) -> str:
@@ -165,9 +169,9 @@ class ListRestaurants(Scenario):
         }, axis=1, inplace=True)
 
         restaurants = restaurants\
-                .set_index("Название")\
-                .astype(bool)\
-                .replace({True: "Да", False: "Нет"})
+            .set_index("Название")\
+            .astype(bool)\
+            .replace({True: "Да", False: "Нет"})
 
         img_name = f"tables/{send_id}_restaurants.png"
         save_table_as_image(restaurants, plot_index=True, output_file=img_name)
@@ -234,7 +238,6 @@ class SelectRandomRestaurant(Scenario):
         "is_fast": "Быстро готовят?",
         "is_new": "Новый или старый?"
     }
-
 
     def get_name(self) -> str:
         return "Выбрать случайный ресторан"
@@ -310,7 +313,6 @@ class SelectRandomRestaurant(Scenario):
 
         if text == "Готово":
             send_id = message.from_user.id
-            print(self.state["filters"])
 
             response = self.backend.get_random_restaurant(**self.state["filters"])
 
@@ -318,13 +320,8 @@ class SelectRandomRestaurant(Scenario):
                 msg = f"Произошла хуйня следующего содержания:\n{response.answer}"
                 self.bot.send_message(send_id, msg)
                 return
-            restaurants = response.answer
 
-            # restaurants = [
-            #     {"restaurant_name": "zalupa", "restaurant_id": 1},
-            #     {"restaurant_name": "piska", "restaurant_id": 2},
-            #     {"restaurant_name": "chlennica", "restaurant_id": 3}
-            # ]
+            restaurants = response.answer
 
             if not len(restaurants):
                 self.bot.send_message(send_id, "Список пуст, необходимо опохуить фильтры")
@@ -344,7 +341,10 @@ class SelectRandomRestaurant(Scenario):
         else:
             self.bot.send_message(send_id, "Опять ввел хуйню.")
 
-    def handle_filters(self, message: Union["telebot.types.Message", "telebot.types.CallbackQuery"]) -> Optional[Callable]:
+    def handle_filters(
+            self,
+            message: Union["telebot.types.Message", "telebot.types.CallbackQuery"]
+    ) -> Optional[Callable]:
         if isinstance(message, telebot.types.CallbackQuery):
             self._handle_callback(message)
             return self.handle_filters

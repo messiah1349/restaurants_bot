@@ -1,8 +1,11 @@
 import pandas as pd
 from typing import Callable, Optional
 
+import telebot
+
 from lib.scenario.base import Scenario
 from lib.scenario.utils import create_keyboard, save_table_as_image
+from lib.scenario.mark import create_change_mark_menu
 
 
 class CreatePayment(Scenario):
@@ -51,7 +54,16 @@ class CreatePayment(Scenario):
         payer_id = self.state["users"][payer_name]
         self.state["params"]["payer"] = payer_id
 
-        self.bot.send_message(send_id, f"За что заплатил {payer_name}?")
+        response = self.backend.get_restaurant_list()
+        if response.status != 1:
+            self.bot.send_message(send_id, "Не могу получить рестораны")
+            return
+
+        self.state["restaurants"] = {r["name"]: r["restaurant_id"] for r in response.answer}
+        keyboard = create_keyboard(list(self.state["restaurants"].keys()))
+
+        msg = f"За что заплатил {payer_name}?\nВыберите ресторан или введите комментарий платежа"
+        self.bot.send_message(send_id, msg, reply_markup=keyboard)
         return self.handle_comment
 
     def handle_comment(self, message: "telebot.types.Message") -> Optional[Callable]:
@@ -60,9 +72,20 @@ class CreatePayment(Scenario):
         if not message.text:
             self.bot.send_message(send_id, "Введи текст")
             return self.handle_comment
+        elif message.text in self.state["restaurants"]:
+            self.state["params"]["comment"] = message.text.replace("\n", " ")
+            self.state["params"]["restaurant_id"] = int(self.state["restaurants"][message.text])
+            self.state["params"]["payment_type"] = "restaurant"
+            self.state["restaurant_name"] = message.text
+
+            self.bot.send_message(send_id, f"Оплата ресторана {message.text}.\nСколько заплатил?")
+            return self.handle_total
         else:
             self.state["params"]["comment"] = message.text.replace("\n", " ")
-            self.bot.send_message(send_id, "Сколько заплатил?")
+            self.state["params"]["payment_type"] = "other"
+
+            keyboard_remove = telebot.types.ReplyKeyboardRemove()
+            self.bot.send_message(send_id, f"Оплата '{message.text}'.\nСколько заплатил?", reply_markup=keyboard_remove)
             return self.handle_total
 
     def handle_total(self, message: "telebot.types.Message") -> Optional[Callable]:
@@ -81,7 +104,7 @@ class CreatePayment(Scenario):
 
         msg = "Сколько должен заплатить каждый?"
 
-        keyboard = create_keyboard(["Поровну", "Не поровну"])
+        keyboard = create_keyboard(["Поровну", "Не поровну", "Один на Х больше, чем другие"])
         self.bot.send_message(send_id, msg, reply_markup=keyboard)
 
         return self.handle_same_shares
@@ -98,6 +121,7 @@ class CreatePayment(Scenario):
             response = self.backend.add_payment(**self.state["params"])
             if response.status == 1:
                 self.bot.send_message(send_id, "Успешно!")
+                self.notify_mark_update()
             else:
                 self.bot.send_message(send_id, "Произошла ошибка, придется все заново делать!")
             return
@@ -110,10 +134,75 @@ class CreatePayment(Scenario):
             self.state["shares_info"] = shares_info
 
             self.bot.send_message(send_id, f"{cur_name} должен уплатить:\n")
+
             return self.handle_share_loop
+        elif message.text == "Один на Х больше, чем другие":
+            names = list(self.state["users"].keys())
+
+            keyboard = create_keyboard(names)
+            self.bot.send_message(send_id, "Кто должен заплатить больше?", reply_markup=keyboard)
+
+            return self.handle_who_pays_more
         else:
             self.bot.send_message(send_id, "Неправильный ввод")
             return self.handle_same_shares
+
+    def notify_mark_update(self):
+        if self.state["params"]["restaurant_id"] is None:
+            return
+        for user_id in self.state["users"].values():
+            create_change_mark_menu(
+                bot=self.bot,
+                send_id=user_id,
+                restaurant_name=self.state["restaurant_name"],
+                restaurant_id=self.state["params"]["restaurant_id"]
+            )
+
+    def handle_who_pays_more(self, message: "telebot.types.Message") -> Optional[Callable]:
+        send_id = message.from_user.id
+        names = list(self.state["users"].keys())
+        if message.text not in names:
+            self.bot.send_message(send_id, "Выбери из списка")
+            return self.handle_who_pays_more
+        else:
+            self.state["who_pays_more"] = message.text
+            self.bot.send_message(send_id, f"На сколько больше {message.text} должен заплатить?")
+            return self.handle_pay_difference
+
+    def handle_pay_difference(self, message: "telebot.types.Message") -> Optional[Callable]:
+        send_id = message.from_user.id
+        total = self.state["params"]["total"]
+        user_ids = list(self.state["users"].values())
+        try:
+            diff = float(message.text)
+        except ValueError:
+            self.bot.send_message(send_id, "Введи число")
+            return self.handle_pay_difference
+
+        if diff >= total:
+            msg = f"Нельзя заплатить на {diff} больше, если общий чек {total}"
+            self.bot.send_message(send_id, msg)
+            return self.handle_pay_difference
+
+        common_part = (total - diff) / len(user_ids)
+        id_to_share = {user_id: common_part for user_id in user_ids}
+
+        who_pays_more_name = self.state["who_pays_more"]
+        who_pays_more_id = self.state["users"][who_pays_more_name]
+
+        largest_share = common_part + diff
+
+        id_to_share[who_pays_more_id] = largest_share
+        self.state["params"]["shares"] = id_to_share
+
+        response = self.backend.add_payment(**self.state["params"])
+        if response.status == 1:
+            msg = f"Успешно! {who_pays_more_name} платит {largest_share}, остальные - {common_part}"
+            self.bot.send_message(send_id, msg)
+            self.notify_mark_update()
+        else:
+            self.bot.send_message(send_id, "Произошла ошибка, придется все заново делать!")
+        return
 
     def _get_cur_name(self) -> Optional[str]:
         si = self.state["shares_info"]
@@ -163,6 +252,7 @@ class CreatePayment(Scenario):
             response = self.backend.add_payment(**self.state["params"])
             if response.status == 1:
                 self.bot.send_message(send_id, "Успешно!")
+                self.notify_mark_update()
             else:
                 self.bot.send_message(send_id, "Что-то пошло не так, придется еще раз!!")
             return
@@ -223,7 +313,6 @@ class RemovePayment(Scenario):
         if response.status != 1:
             self.bot.send_message(send_id, "Что-то пошло не так, придется еще раз!!")
             return
-
 
         payments = response.answer
 
