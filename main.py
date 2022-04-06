@@ -12,7 +12,7 @@ def main():
 
     client = Client(args.backend, args.token)
     client.run()
-    
+
 
 if __name__ == "__main__":
     main()
