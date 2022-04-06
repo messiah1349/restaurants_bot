@@ -3,11 +3,12 @@ import os
 import telebot
 
 from lib.backend import Backend
-from lib.scenario import init_scenarios
+from lib.scenario import init_scenarios, init_events
+from lib.scenario.event import try_parse_event
 
 
 class ScenarioProcessor:
-    def __init__(self, bot, backend):
+    def __init__(self, bot: "telebot.Telebot", backend: "Backend"):
         self.bot = bot
         self.backend = backend
 
@@ -37,6 +38,25 @@ class ScenarioProcessor:
     def _send_callback_query_error(self, sid):
         self.bot.send_message(sid, "Перестань сюда нажимать, долбоеб")
 
+
+class EventProcessor:
+    def __init__(self, bot: "telebot.Telebot", backend: "Backend"):
+        self.bot = bot
+        self.backend = backend
+
+        self.subscribers = {}
+
+    def register(self, event_type: str, subscriber: "Subscriber"):
+        self.subscribers[event_type].append(subscriber)
+
+    def process_event(self, event: "Event"):
+        if event.sender_id not in self.subscribers:
+            self.subscribers[event.sender_id] = init_events(self.bot, self.backend)
+
+        for subscriber in self.subscribers[event.sender_id][event.event_type]:
+            subscriber.start(event)
+
+
 class Client:
     ROOT_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -54,15 +74,20 @@ class Client:
         self.backend = Backend(db_path)
         self.bot = telebot.TeleBot(token)
 
-        self.processor = ScenarioProcessor(self.bot, self.backend)
+        self.scenario_processor = ScenarioProcessor(self.bot, self.backend)
+        self.event_processor = EventProcessor(self.bot, self.backend)
 
         @self.bot.callback_query_handler(func=lambda call: True)
         def callback_handler(call):
-            self.processor.handle_next(call)
+            event = try_parse_event(call)
+            if event is not None:
+                self.event_processor.process_event(event)
+            else:
+                self.scenario_processor.handle_next(call)
 
         @self.bot.message_handler(content_types=["text"])
         def message_handler(message):
-            self.processor.handle_next(message)
+            self.scenario_processor.handle_next(message)
 
     def run(self):
-        self.bot.polling(none_stop=True, interval=0)
+        self.bot.infinity_polling(timeout=10, long_polling_timeout=5)
