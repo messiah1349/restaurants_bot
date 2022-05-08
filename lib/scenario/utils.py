@@ -1,11 +1,14 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib
 
 from typing import Iterable, Optional
 
 from telebot import types
 
 from lib.scenario.event import sign_callback
+
+matplotlib.use("qt4agg")
 
 
 def create_inline_keyboard(

@@ -1,16 +1,28 @@
+import re
+
 import pandas as pd
-from typing import Callable, Optional
+from typing import Callable, Optional, Union
 
 import telebot
 
 from lib.scenario.base import Scenario
-from lib.scenario.utils import create_keyboard, save_table_as_image
+from lib.scenario.utils import (
+    create_keyboard,
+    create_inline_keyboard,
+    save_table_as_image
+)
 from lib.scenario.mark import create_change_mark_menu
+
+TAX = 1.1
 
 
 class CreatePayment(Scenario):
+    def __init__(self, parent: "Scenario", is_smart: bool, bot: "telebot.TeleBot", backend: "Backend"):
+        self.is_smart = is_smart
+        super().__init__(parent, bot, backend)
+
     def get_name(self) -> str:
-        return "Создать платеж"
+        return "Создать платеж" if not self.is_smart else "Создать SmartShare™ платеж"
 
     def start(self, message: "telebot.types.Message") -> Optional[Callable]:
         send_id = message.from_user.id
@@ -26,6 +38,14 @@ class CreatePayment(Scenario):
             return
 
         user_name_to_id = {user["name"]: user["telegram_id"] for user in response.answer}
+        sender_name = None
+
+        for name, user_id in user_name_to_id.items():
+            if user_id == send_id:
+                sender_name = name
+
+        assert sender_name is not None
+        print(sender_name)
 
         call_params = {
             "creator_id": send_id,
@@ -36,9 +56,29 @@ class CreatePayment(Scenario):
             "shares": {}
         }
 
-        self.state = {"params": call_params, "users": user_name_to_id}
+        self.state = {
+            "params": dict(call_params),
+            "tip_params": dict(call_params),
+            "users": user_name_to_id,
+            "sender_name": sender_name
+        }
 
         keyboard = create_keyboard(list(user_name_to_id.keys()))
+
+        if self.is_smart:
+            self.bot.send_message(send_id, """
+Приготовься создавать платеж по технологии SmartShare!™
+- Не считай 10% налог
+- Отдельно вводи чаевые
+- Используй бота, как калькулятор
+            """)
+            self.state["smart_share"] = [{"name": name, "payment": None} for name in user_name_to_id.keys()]
+            # move payer to the beginning
+            self.state["smart_share"].sort(key=lambda x: -1 if x["name"] == sender_name else 1)
+            self.state["smart_tips"] = [{"name": name, "payment": None} for name in user_name_to_id.keys()]
+
+            self.state["smart_share_index"] = 0
+
         self.bot.send_message(send_id, "Кто заплатил?", reply_markup=keyboard)
 
         return self.handle_payer
@@ -102,12 +142,219 @@ class CreatePayment(Scenario):
 
         self.state["params"]["total"] = total
 
-        msg = "Сколько должен заплатить каждый?"
+        if self.is_smart and self.state["params"]["restaurant_id"] is not None:
+            next_payer = self.ask_next_smart_payer()
+            msg = f"""
+Введи цену за каждое блюдо или просуммируй как лох самостоятельно.
+Не учитывай никакие налоги, просто перепиши цифры из чека.
+Например:
+1300 + 2500 + 1200
+1000+400+88
+или
+5000
 
-        keyboard = create_keyboard(["Поровну", "Не поровну", "Один на Х больше, чем другие"])
-        self.bot.send_message(send_id, msg, reply_markup=keyboard)
+{next_payer}:
+            """
 
-        return self.handle_same_shares
+            self.bot.send_message(send_id, msg)
+            return self.handle_smart_share_loop
+        else:
+            msg = "Сколько должен заплатить каждый?"
+
+            keyboard = create_keyboard(["Поровну", "Не поровну", "Один на Х больше, чем другие"])
+            self.bot.send_message(send_id, msg, reply_markup=keyboard)
+
+            return self.handle_same_shares
+
+    def ask_next_smart_payer(self) -> Optional[str]:
+        if self.smart_payers_to_fill_count() == 0:
+            return
+
+        while True:
+            index = self.state["smart_share_index"]
+            name_and_payment = self.state["smart_share"][index]
+
+            if name_and_payment["payment"] is None:
+                name = name_and_payment["name"]
+                break
+
+            self.state["smart_share_index"] = (index + 1) % len(self.state["smart_share"])
+
+        return name
+
+    def fill_smart_payment(self, value: int) -> Optional[str]:
+        index = self.state["smart_share_index"]
+        self.state["smart_share"][index]["payment"] = value
+        self.state["smart_share_index"] = (index + 1) % len(self.state["smart_share"])
+
+    def smart_payers_to_fill_count(self) -> int:
+        return len([x for x in self.state["smart_share"] if x["payment"] is None])
+
+    def parse_smart_share_tip(self, text: str) -> Union[int, str]:
+        try:
+            value = int(text)
+        except ValueError:
+            return "Введи число"
+
+        if value < 0:
+            return "Неотрицательное число нужно"
+
+        return value
+
+    def parse_smart_share_payment(self, text: str) -> Union[int, str]:
+        is_matched = re.match("^(\d|[\.\+\-\*\/]| )+$", text) is not None
+
+        if not is_matched:
+            return "Цифры, арифметические действия и пробелы только"
+
+        try:
+            value = eval(text)
+        except SyntaxError:
+            return "Такое не распарсить, скорее всего ты идиот"
+
+        if value < 0:
+            return "Нельзя отрицательное вводить. Тупой."
+
+        current_total = sum(item["payment"] for item in self.state["smart_share"]
+                            if item["payment"] is not None)
+
+        if (current_total + value) * TAX > self.state["params"]["total"]:
+            return "Слишком много вышло. Заново вводи"
+
+        value *= TAX
+
+        return value
+
+    def fill_last_smart_payer(self) -> None:
+        total = self.state["params"]["total"]
+
+        rest = total - sum(item["payment"] for item in self.state["smart_share"]
+                           if item["payment"] is not None)
+        self.fill_smart_payment(rest)
+
+    def handle_smart_share_loop(self, message: "telebot.types.Message") -> Optional[Callable]:
+        send_id = message.from_user.id
+
+        payers_to_fill = self.smart_payers_to_fill_count()
+        assert payers_to_fill > 1
+
+        value = self.parse_smart_share_payment(message.text)
+        if isinstance(value, str):
+            self.bot.send_message(send_id, value)
+            return self.handle_smart_share_loop
+        else:
+            self.fill_smart_payment(value)
+            if payers_to_fill - 1 > 1:
+                next_payer = self.ask_next_smart_payer()
+                self.bot.send_message(send_id, f"{next_payer}:")
+                return self.handle_smart_share_loop
+            else:
+                self.fill_last_smart_payer()
+                keyboard = create_keyboard(["Да", "Нет"])
+                self.bot.send_message(send_id, f"Чаевые?", reply_markup=keyboard)
+                return self.handle_tips
+
+    def handle_tips(self, message: "telebot.types.Message") -> Optional[Callable]:
+        send_id = message.from_user.id
+        if message.text == "Да":
+            keyboard = create_keyboard(list(self.state["users"].keys()))
+            self.bot.send_message(send_id, f"Кто заплатил чаевые?", reply_markup=keyboard)
+            return self.handle_tips_payer
+        else:
+            self.bot.send_message(send_id, f"Пидора ответ")
+            self.finalize_smart_payment(send_id)
+            return
+
+    def handle_tips_payer(self, message: "telebot.types.Message") -> Optional[Callable]:
+        send_id = message.from_user.id
+        payer_name = message.text
+
+        if payer_name not in self.state["users"]:
+            self.bot.send_message(send_id, "Просто выбери из списка, долбоеб. Ничего не пиши.")
+            return
+
+        payer_id = self.state["users"][payer_name]
+        self.state["tip_params"]["payer"] = payer_id
+        self.state["tip_payer_name"] = payer_name
+
+        self.bot.send_message(send_id, "Сколько заплатил?")
+        return self.handle_tips_payment
+
+    def handle_tips_payment(self, message: "telebot.types.Message") -> Optional[Callable]:
+        send_id = message.from_user.id
+        try:
+            value = int(float(message.text))
+        except ValueError:
+            self.bot.send_message(send_id, "Введи число")
+            return self.handle_tips_payment
+
+        if value <= 0:
+            self.bot.send_message(send_id, "Введи положительное число")
+            return self.handle_tips_payment
+
+        self.state["tip_params"]["total"] = value
+
+        user_ids = list(self.state["users"].values())
+        id_to_share = {user_id: round(value / len(user_ids)) for user_id in user_ids}
+
+        self.state["tip_params"]["shares"] = id_to_share
+        self.state["tip_params"]["comment"] = "(чай) " + self.state["params"]["comment"]
+
+        self.finalize_smart_payment(send_id)
+
+    def finalize_smart_payment(self, send_id):
+        print("Finalizing")
+        info_msg = []
+
+        payer_name = list(filter(lambda user: user[1] == self.state["params"]["payer"],
+                                 self.state["users"].items()))[0][0]
+
+        info_msg.append(f"Уплатил: {payer_name}")
+        info_msg.append(f"Чек: {self.state['params']['total']}")
+
+        self.state["smart_share"] = {item["name"]: round(item["payment"]) for item in self.state["smart_share"]}
+
+        smart_share_msg = "\n".join(f"{name}: {round(share / TAX)}"
+                                    for name, share in self.state["smart_share"].items())
+        info_msg.append(f"По чеку (без налога): \n{smart_share_msg}")
+
+        smart_share_msg = "\n".join(f"{name}: {share}" for name, share in self.state["smart_share"].items())
+        info_msg.append(f"По чеку (с налогом): \n{smart_share_msg}")
+
+        has_tips = "total" in self.state["tip_params"]
+
+        if has_tips:
+            tip_total = self.state["tip_params"]["total"]
+            min_tip = min(self.state["tip_params"]["shares"].values())
+            max_tip = max(self.state["tip_params"]["shares"].values())
+            assert min_tip == max_tip
+
+            info_msg.append(f"Чаевые: {tip_total}\nУплатил: {self.state['tip_payer_name']}")
+            info_msg.append(f"С каждого по {max_tip}")
+
+        users = self.state["users"]
+        id_to_share = {users[name]: share for name, share in self.state["smart_share"].items()}
+        self.state["params"]["shares"] = id_to_share
+
+        self.bot.send_message(send_id, "\n\n".join(info_msg))
+
+        main_response = self.backend.add_payment(**self.state["params"])
+        if main_response.status == 1:
+            self.bot.send_message(send_id, "Основной платеж введен успешно!")
+        else:
+            self.bot.send_message(send_id, "Произошла ошибка, придется все заново делать!")
+            return
+
+        if has_tips:
+            tips_response = self.backend.add_payment(**self.state["tip_params"])
+            if tips_response.status == 1:
+                self.bot.send_message(send_id, "Чаевые введены успешно!")
+            else:
+                self.bot.send_message(send_id, "Чаевые проебались, введи их отдельно!")
+                return
+
+        self.notify_mark_update()
+        return
 
     def handle_same_shares(self, message: "telebot.types.Message") -> Optional[Callable]:
         send_id = message.from_user.id

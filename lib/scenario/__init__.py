@@ -37,7 +37,8 @@ from lib.scenario.mark import (
 def init_scenarios(bot, backend):
     root = ScenarioList(None, "Список действий", bot, backend)
     payments = ScenarioList(root, "Платежи", bot, backend)
-    CreatePayment(payments, bot, backend)
+    CreatePayment(payments, is_smart=True, bot=bot, backend=backend)
+    CreatePayment(payments, is_smart=False, bot=bot, backend=backend)
     ListOwes(payments, bot, backend)
     ListPayments(payments, bot, backend)
     ResolvePayments(payments, bot, backend)
